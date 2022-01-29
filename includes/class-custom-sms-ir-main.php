@@ -15,14 +15,18 @@ class MainSMSClass
 
     public function update_order_metadata($check, $object_id, $meta_key, $meta_value)
     {
-        if ('marsule' === $meta_key && $meta_value !== get_post_meta($object_id, $meta_key, true)) {
+        if ('marsule' === $meta_key && (mb_strlen($meta_value) > 1) && $meta_value !== get_post_meta($object_id, $meta_key, true)) {
             $this->order_marsule_meta_updated($object_id, $meta_value);
         }
+
+        return $check;
     }
 
     public function order_marsule_meta_updated($object_id, $meta_value)
     {
         $order = new WC_Order($object_id);
+
+        $this->order_completed_send_marsule_sms($object_id, $meta_value);
 
         $order->set_status('completed');
 
@@ -32,14 +36,14 @@ class MainSMSClass
     public function order_status_sms($order_id, $old_status, $new_status, $order)
     {
         if ($new_status == "completed") {
-            $this->order_completed($order_id);
+//            $this->order_completed($order_id);
         }
         if ($new_status == "processing") {
             $this->order_processing($order_id);
         }
     }
 
-    public function order_completed($order_id)
+    public function order_completed_send_marsule_sms($order_id, $code)
     {
         $order = new WC_Order($order_id);
 
@@ -61,7 +65,7 @@ class MainSMSClass
 
         $this->send_sms($phone, '61245', [
             'id' => $order_id,
-            'code' => get_post_meta($order_id, 'marsule', true),
+            'code' => $this->normalize_marsule_code($code),
             'support' => "\n" . SMS_SITE_FA_NAME . "\n" . SMS_SITE_URL
         ]);
     }
@@ -118,6 +122,32 @@ class MainSMSClass
         return true;
     }
 
+    function normalize_marsule_code($code)
+    {
+        $code = str_replace('|', '1', $code);
+        $code = str_replace('.', '0', $code);
+        $code = str_replace(' ', '', $code);
+
+        $newNumbers = range(0, 9);
+        // 1. Persian HTML decimal
+        $persianDecimal = array('&#1776;', '&#1777;', '&#1778;', '&#1779;', '&#1780;', '&#1781;', '&#1782;', '&#1783;', '&#1784;', '&#1785;');
+        // 2. Arabic HTML decimal
+        $arabicDecimal = array('&#1632;', '&#1633;', '&#1634;', '&#1635;', '&#1636;', '&#1637;', '&#1638;', '&#1639;', '&#1640;', '&#1641;');
+        // 3. Arabic Numeric
+        $arabic = array('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩');
+        // 4. Persian Numeric
+        $persian = array('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹');
+
+        $code = str_replace($persianDecimal, $newNumbers, $code);
+        $code = str_replace($arabicDecimal, $newNumbers, $code);
+        $code = str_replace($persian, $newNumbers, $code);
+        $code = str_replace($arabic, $newNumbers, $code);
+
+
+        $code = preg_replace('/\D/', '', $code);
+        return $code;
+    }
+
     function background_curl_request($url, $method, $post_parameters)
     {
         $path = __DIR__ . '/../logs/';
@@ -126,7 +156,7 @@ class MainSMSClass
         file_put_contents($path . 'backend-commands.log', $command . "\n\n", FILE_APPEND);
 
         if (SMS_PROD) {
-            shell_exec($command);
+            exec($command);
         }
     }
 
@@ -140,7 +170,7 @@ class MainSMSClass
         foreach ($postData['ParameterArray'] as $parameter) {
             $log .= "\n(" . $parameter['Parameter'] . ": " . $parameter['ParameterValue'] . ")";
         }
-        $log .= "\n----------------";
+        $log .= "\n----------------\n";
 
         file_put_contents((__DIR__ . '/../logs/') . 'send.log', $log, FILE_APPEND);
 
@@ -169,7 +199,6 @@ class MainSMSClass
         $result = curl_exec($ch);
         curl_close($ch);
 
-        die(var_dump($result));
         return 'php';
     }
 
