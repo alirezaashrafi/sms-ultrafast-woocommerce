@@ -30,7 +30,6 @@ class CUSTOM_SMS_IR_Activator {
 	 * @since    1.0.0
 	 */
 	public static function activate() {
-        copy(__DIR__.'/../config.simple.php', __DIR__.'/../config.php');
 	}
 
 }
